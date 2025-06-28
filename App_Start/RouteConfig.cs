@@ -68,7 +68,7 @@ namespace WebBanHangOnline
            );
             routes.MapRoute(
                name: "Promotion",
-               url: "Promotion",
+               url: "promotion",
                defaults: new { controller = "Promotion", action = "Index", alias = UrlParameter.Optional },
                namespaces: new[] { "WebBanHangOnline.Controllers" }
            );

@@ -1,6 +1,7 @@
 ﻿@model IEnumerable<WebBanHangOnline.Models.ShoppingCartItem>
 @using WebBanHangOnline.Common
 
+
 @if (Model != null && Model.Any())
 {
     <h3>Đơn hàng <span style="float:right;position:relative"></span></h3>
@@ -18,17 +19,46 @@
             }
             <tr>
                 <td colspan="2">Tạm tính</td>
-                <td>@Common.FormatNumber(tongtien, 0) VNĐ</td>
+                <td id="subtotalPrice" data-value="@tongtien">@Common.FormatNumber(tongtien, 0) VNĐ</td>
             </tr>
             <tr>
                 <td colspan="2">Tiền ship</td>
-                <td>@Common.FormatNumber(ViewBag.MoneyShip) VNĐ</td>
+                <td id="shippingPrice" data-value="@ViewBag.MoneyShip">@Common.FormatNumber(ViewBag.MoneyShip, 0) VNĐ</td>
+            </tr>
+            
+            <tr>
+                <td colspan="2">Tiền giảm</td>
+                <td id="discountAmount">0 VNĐ</td>
             </tr>
             <tr>
                 <td colspan="2">Tổng cộng</td>
-                <td>@Common.FormatNumber(tongtien + @ViewBag.MoneyShip, 0) VNĐ</td>
+                <td id="totalPrice" data-original-price="@(tongtien + (decimal)ViewBag.MoneyShip)">
+                    @Common.FormatNumber(tongtien + (decimal)ViewBag.MoneyShip, 0) VNĐ
+                </td>
             </tr>
         </table>
     </div>
 }
 
+@section scripts{
+    <script>
+        $(document).ready(function () {
+            var subtotal = parseFloat($('#subtotalPrice').data('value')) || 0;
+            var shipping = parseFloat($('#shippingPrice').data('value')) || 0;
+
+            function formatCurrency(num) {
+                return num.toLocaleString('vi-VN') + ' VNĐ';
+            }
+
+            $('#PromotionCode').on('change', function () {
+                var discountPercent = parseFloat($(this).find('option:selected').data('discount')) || 0;
+                var discountAmount = (discountPercent / 100) * subtotal;
+                var total = subtotal + shipping - discountAmount;
+
+                $('#discountAmount').text(formatCurrency(discountAmount));
+
+                $('#totalPrice').text(formatCurrency(total));
+            });
+        });
+        </script>
+}

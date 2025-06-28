@@ -20,6 +20,6 @@ namespace WebBanHangOnline.Models
         public int MoneyShip {  get; set; }
         public int TypePayment { get; set; }
         public int TypePaymentVN { get; set; }
-        public string VoucherId { get; set; }
+        public string PromotionCode { get; set; }
     }
 }

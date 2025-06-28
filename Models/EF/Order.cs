@@ -29,6 +29,7 @@ namespace WebBanHangOnline.Models.EF
         public int MoneyShip {  get; set; }
         public decimal TotalAmount { get; set; }
         public int Status { get; set; }
+        public int PaymentStatus { get; set; }
         public string CustomerId { get; set; }
         public string VoucherId { get; set; }
         public int TypePayment { get; set; }

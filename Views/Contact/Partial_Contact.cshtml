@@ -1,8 +1,8 @@
 ﻿@model WebBanHangOnline.Models.EF.Contact
 
 <div class="get_in_touch_contents">
-    <h1>Get In Touch With Us!</h1>
-    <p>Fill out the form below to receive a free and confidential.</p>
+    <h1>Chúng tôi luôn sẵn sàng hỗ trợ bạn!</h1>
+    <p> Hãy để lại thông tin – bạn sẽ nhận được phản hồi trong thời gian sớm nhất.</p>
     <div>
         @using (Html.BeginForm("Add", "Contact", FormMethod.Post, new { }))
         {
@@ -15,7 +15,7 @@
                 <input id="input_website" class="form_input input_website input_ph" type="url" name="Website" placeholder="Website" required="required" data-error="Website is required.">
                 <textarea id="input_message" class="input_ph input_message" name="Message" placeholder="Message" rows="3" required data-error="Please write us a message."></textarea>
                 <div>
-                    <button id="review_submit" type="submit" class="red_button message_submit_btn trans_300" value="Submit">Send Message</button>
+                    <button id="review_submit" type="submit" class="red_button message_submit_btn trans_300" value="Submit">Gửi</button>
                 </div>
             </div>
         }

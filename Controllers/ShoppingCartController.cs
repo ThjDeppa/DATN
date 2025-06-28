@@ -3,6 +3,7 @@ using Microsoft.AspNet.Identity.Owin;
 using System;
 using System.Collections.Generic;
 using System.Configuration;
+using System.Data.Entity.Core.Common.CommandTrees.ExpressionBuilder;
 using System.Linq;
 using System.Web;
 using System.Web.Mvc;
@@ -98,7 +99,8 @@ namespace WebBanHangOnline.Controllers
                         var itemOrder = db.Orders.FirstOrDefault(x => x.Code == orderCode);
                         if (itemOrder != null)
                         {
-                            itemOrder.Status = 2;//đã thanh toán
+                            itemOrder.PaymentStatus = 1;//đã thanh toán
+                            itemOrder.Status = 2;//đã xác nhận
                             db.Orders.Attach(itemOrder);
                             db.Entry(itemOrder).State = System.Data.Entity.EntityState.Modified;
                             db.SaveChanges();
@@ -130,9 +132,35 @@ namespace WebBanHangOnline.Controllers
             if (cart != null && cart.Items.Any())
             {
                 ViewBag.CheckCart = cart;
+
+                var productDetailIds = cart.Items.Select(x => x.ProductDetailId).ToList();
+                var productIds = db.ProductDetails
+                                  .Where(pd => productDetailIds.Contains(pd.Id))
+                                  .Select(pd => pd.ProductId)
+                                  .ToList();
+
+                var now = DateTime.Now;
+
+                // Lấy khuyến mãi
+                var promotions = db.promotions
+                    .Where(p => p.StartDate <= now && p.EndDate >= now)
+                    .SelectMany(p => p.promotion_product)
+                    .Where(pp => productIds.Contains(pp.ProductId))
+                    .Select(pp => pp.Promotion)
+                    .Distinct()
+                    .ToList();
+
+                // Lấy voucher hợp lệ (còn số lượng, trong thời gian hiệu lực)
+                var vouchers = db.Vouchers
+                    .Where(v => v.StartDate <= now && v.EndDate >= now && v.Quantity > 0)
+                    .ToList();
+
+                ViewBag.Promotions = promotions;
+                ViewBag.Vouchers = vouchers; // Thêm vào ViewBag
             }
             return View();
         }
+
         [AllowAnonymous]
         public ActionResult CheckOutSuccess()
         {
@@ -146,6 +174,28 @@ namespace WebBanHangOnline.Controllers
             if (cart != null && cart.Items.Any())
             {
                 ViewBag.MoneyShip = 30000;
+                var now = DateTime.Now;
+
+                ViewBag.CheckCart = cart;
+
+                var productDetailIds = cart.Items.Select(x => x.ProductDetailId).ToList();
+
+                var productIds = db.ProductDetails
+                                  .Where(pd => productDetailIds.Contains(pd.Id))
+                                  .Select(pd => pd.ProductId)
+                                  .ToList();
+
+
+                var promotions = db.promotions
+                    .Where(p => p.StartDate <= now && p.EndDate >= now)
+                    .SelectMany(p => p.promotion_product)
+                    .Where(pp => productIds.Contains(pp.ProductId))
+                    .Select(pp => pp.Promotion)
+                    .Distinct()
+                    .ToList();
+
+                ViewBag.Promotions = promotions;
+
                 return PartialView("Partial_Item_ThanhToan", cart.Items);
             }
             return PartialView("Partial_Item_ThanhToan");
@@ -171,15 +221,51 @@ namespace WebBanHangOnline.Controllers
             return Json(new { Count = 0 }, JsonRequestBehavior.AllowGet);
         }
         [AllowAnonymous]
-        public ActionResult Partial_CheckOut(ShoppingCart cart)
+        public ActionResult Partial_CheckOut()
         {
             var user = UserManager.FindByNameAsync(User.Identity.Name).Result;
             if (user != null)
             {
                 ViewBag.User = user;
             }
+
+            ShoppingCart cart = Session["Cart"] as ShoppingCart;
+            if (cart == null || cart.Items.Count == 0)
+            {
+                ViewBag.CheckCart = null;
+                ViewBag.Promotions = new List<Promotion>();
+                return PartialView();
+            }
+
+            ViewBag.CheckCart = cart;
+
+            var productDetailIds = cart.Items.Select(x => x.ProductDetailId).ToList();
+
+            var productIds = db.ProductDetails
+                              .Where(pd => productDetailIds.Contains(pd.Id))
+                              .Select(pd => pd.ProductId)
+                              .ToList();
+
+            var now = DateTime.Now;
+
+            var promotions = db.promotions
+                .Where(p => p.StartDate <= now && p.EndDate >= now)
+                .SelectMany(p => p.promotion_product)
+                .Where(pp => productIds.Contains(pp.ProductId))
+                .Select(pp => pp.Promotion)
+                .Distinct()
+                .ToList();
+            var vouchers = db.Vouchers
+            .Where(v => v.StartDate <= now && v.EndDate >= now && v.Quantity > 0)
+            .ToList();
+
+            ViewBag.Promotions = promotions;
+            ViewBag.Vouchers = vouchers;
+
             return PartialView();
         }
+
+
         [AllowAnonymous]
         [HttpPost]
         [ValidateAntiForgeryToken]
@@ -196,7 +282,7 @@ namespace WebBanHangOnline.Controllers
                     order.Phone = req.Phone;
                     order.Address = req.Address;
                     order.Email = req.Email;
-                    order.Status = 1;//chưa thanh toán / 2/đã thanh toán, 3/Hoàn thành, 4/Hủy
+                    order.Status = -1;
                     cart.Items.ForEach(x => order.OrderDetails.Add(new OrderDetail
                     {
                         ProductDetailId = x.ProductDetailId,
@@ -204,20 +290,82 @@ namespace WebBanHangOnline.Controllers
                         Quantity = x.Quantity,
                         Price = x.Price,
                     }));
-                    var Toltal = cart.Items.Sum(x => (x.Price * x.Quantity));
+                    var total = cart.Items.Sum(x => (x.Price * x.Quantity));
                     order.MoneyShip = req.MoneyShip = 30000;
-                    order.TotalAmount = Toltal + req.MoneyShip;
                     order.TypePayment = req.TypePayment;
                     order.CreatedDate = DateTime.Now;
                     order.ModifiedDate = DateTime.Now;
                     order.CreatedBy = req.Phone;
+                    order.PaymentStatus = 0;
                     if (User.Identity.IsAuthenticated)
                         order.CustomerId = User.Identity.GetUserId();
                     Random rd = new Random();
                     order.Code = "DH" + rd.Next(0, 9) + rd.Next(0, 9) + rd.Next(0, 9) + rd.Next(0, 9);
+
+                    decimal discount = 0;
+                    int? voucherId = null;
+
+                    if (!string.IsNullOrEmpty(req.PromotionCode))
+                    {
+                        // Xử lý voucher (nếu có prefix "voucher-")
+                        if (req.PromotionCode.StartsWith("voucher-"))
+                        {
+                            var idStr = req.PromotionCode.Replace("voucher-", "");
+                            if (int.TryParse(idStr, out int id))
+                            {
+                                var voucher = db.Vouchers.FirstOrDefault(v => v.Id == id);
+                                if (voucher != null && voucher.Quantity > 0 && voucher.MinimunValue <= total)
+                                {
+                                    if (voucher.Type == 0) // Giảm cố định
+                                    {
+                                        discount = voucher.Value;
+                                    }
+                                    else // Giảm %
+                                    {
+                                        discount = total * voucher.Type / 100;
+                                    }
+
+                                    voucher.Quantity--;
+                                    db.Entry(voucher).State = System.Data.Entity.EntityState.Modified;
+                                    voucherId = voucher.Id;
+                                }
+                            }
+                        }
+                        else // Xử lý khuyến mãi
+                        {
+                            var promo = db.promotions.FirstOrDefault(p => p.Code == req.PromotionCode);
+                            if (promo != null)
+                            {
+                                var firstProduct = promo.promotion_product?.FirstOrDefault();
+                                if (firstProduct != null)
+                                {
+                                    discount = (decimal)firstProduct.Type * total / 100;
+                                }
+                            }
+                        }
+                    }
+
+                    order.TotalAmount = total + req.MoneyShip - discount;
+                    order.VoucherId = voucherId?.ToString();
+
                     //order.E = req.CustomerName;
                     db.Orders.Add(order);
+
+                    foreach (var item in order.OrderDetails)
+                    {
+                        var productDetail = db.ProductDetails.FirstOrDefault(x => x.Id == item.ProductDetailId);
+                        if (productDetail != null)
+                        {
+                            productDetail.Quantity -= item.Quantity;
+                            if (productDetail.Quantity < 0)
+                            {
+                                productDetail.Quantity = 0;
+                            }
+                        }
+                    }
+
                     db.SaveChanges();
+
                     //send mail cho khachs hang
                     var strSanPham = "";
                     var thanhtien = decimal.Zero;
@@ -273,6 +421,8 @@ namespace WebBanHangOnline.Controllers
             }
             return Json(code);
         }
+
+
         [AllowAnonymous]
         [HttpPost]
         public ActionResult AddToCart(int id, int quantity, string size)

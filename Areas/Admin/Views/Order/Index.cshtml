@@ -36,6 +36,7 @@
                         <th>Phone</th>
                         <th>Thành tiền</th>
                         <th>Phương thức thanh toán</th>
+                        <th>Trạng thái thanh toán</th>
                         <th>Trạng thái</th>
                         <th>Ngày tạo</th>
                         <th></th>
@@ -55,28 +56,36 @@
                                 <td>@item.Phone</td>
                                 <td>@WebBanHangOnline.Common.Common.FormatNumber(item.TotalAmount, 0)</td>
                                 <td>@(item.TypePayment == 1 ? "COD" : "Chuyển khoản")</td>
+                                <td>@(item.PaymentStatus == 1 ? "Đã thanh toán" : "Chưa thanh toán")</td>
+
                                 <td>
-                                    @if (item.Status == 1)
+                                    @switch (item.Status)
                                     {
-                                        <span>Chưa thanh toán</span>
-                                    }
-                                    else if(item.Status == 2)
-                                    {
-                                        <span>Đã thanh toán</span>
-                                    }
-                                    else if (item.Status == 3)
-                                    {
-                                        <span>Hoàn thành</span>
-                                    }
-                                    else if (item.Status == 4)
-                                    {
-                                        <span>Hủy</span>
+                                        case -1:
+                                            <span>Chờ xác nhận</span>
+                                            break;
+                                        case 0:
+                                            <span>Hủy</span>
+                                            break;
+                                        case 1:
+                                            <span>Đã giao</span>
+                                            break;
+                                        case 2:
+                                            <span>Đã xác nhận</span>
+                                            break;
+                                        case 3:
+                                            <span>Đang giao</span>
+                                            break;
+                                        default:
+                                            <span>Không xác định</span>
+                                            break;
                                     }
                                 </td>
+
                                 <td>@item.CreatedDate.ToString("dd/MM/yyyy")</td>
                                 <td>
                                     <a href="/admin/order/view/@item.Id" class="btn btn-sm btn-success">Xem</a>
-                                    <a href="#" class="btn btn-sm btn-info btnCapNhat" data-id="@item.Id">Cập nhật</a>
+                                    <a href="#" class="btn btn-sm btn-info btnCapNhat" data-id="@item.Id" data-status="@item.Status">Cập nhật</a>
                                 </td>
                             </tr>
                             i++;
@@ -117,18 +126,19 @@
                 <div class="form-group">
                     <label>Trạng thái</label>
                     <select class="form-control" id="ddTrangThai">
-                        <option value="1">
-                            Chờ xác nhận
-                        </option>
-                        <option value="2">
-                            Đã xác nhận
-                        </option>
-                        <option value="3">
-                            Hoàn thành
-                        </option>
-                        <option value="4">
-                            Hủy
-                        </option>
+                        <option value="-1">Chờ xác nhận</option>
+                        <option value="2">Đã xác nhận</option>
+                        <option value="3">Đang giao</option>
+                        <option value="1">Đã giao</option>
+                        <option value="0">Hủy</option>
+                    </select>
+
+                </div>
+                <div class="form-group">
+                    <label>Trạng thái thanh toán</label>
+                    <select class="form-control" id="ddPaymentStatus">
+                        <option value="0">Chưa thanh toán</option>
+                        <option value="1">Đã thanh toán</option>
                     </select>
                 </div>
             </div>
@@ -142,27 +152,108 @@
     <!-- /.modal-dialog -->
 </div>
 <!-- /.modal -->
-
 @section scripts{
     <script>
         $(document).ready(function () {
+
+            // Hàm chuyển code sang text (có thể dùng để hiển thị nếu cần)
+            function statusText(code) {
+                switch (code) {
+                    case -1: return "Chờ xác nhận";
+                    case 0: return "Hủy";
+                    case 1: return "Đã giao";
+                    case 2: return "Đã xác nhận";
+                    case 3: return "Đang giao";
+                    default: return "Không xác định";
+                }
+            }
+
+            // Lấy trạng thái thanh toán text
+            function paymentStatusText(code) {
+                return code == 1 ? "Đã thanh toán" : "Chưa thanh toán";
+            }
+
             $('body').on('click', '.btnCapNhat', function () {
                 var id = $(this).data("id");
-                $('#txtOrderId').val(id);
-                $('#modal-default').modal('show');
+                var currentStatus = parseInt($(this).data("status"));
+
+                $.ajax({
+                    url: '/admin/order/GetStatus', 
+                    type: 'GET',
+                    data: { id: id },
+                    success: function (res) {
+                        if (res.Success) {
+                            $('#txtOrderId').val(id);
+
+                            $('#ddTrangThai').val(res.Status);
+
+                            $('#ddPaymentStatus').val(res.PaymentStatus);
+
+                            var allowedStatuses = [];
+
+                            switch (res.Status) {
+                                case -1: // Chờ xác nhận
+                                    allowedStatuses = [-1, 2, 3, 0]; // Có thể giữ hoặc chuyển sang xác nhận, đang giao, hủy
+                                    break;
+                                case 2: // Đã xác nhận
+                                    allowedStatuses = [2, 3, 0];
+                                    break;
+                                case 3: // Đang giao
+                                    allowedStatuses = [1, 0];
+                                    break;
+                                case 1: // Đã giao
+                                case 0: // Hủy
+                                    allowedStatuses = []; // Không cho cập nhật nữa
+                                    break;
+                                default:
+                                    allowedStatuses = [];
+                            }
+
+                            $('#ddTrangThai option').prop('disabled', true);
+
+                            allowedStatuses.forEach(function (val) {
+                                $('#ddTrangThai option[value="' + val + '"]').prop('disabled', false);
+                            });
+
+                            if (allowedStatuses.length == 0) {
+                                $('#btnLuu').hide();
+                            } else {
+                                $('#btnLuu').show();
+                            }
+
+                            $('#modal-default').modal('show');
+                        } else {
+                            alert("Lấy thông tin trạng thái thất bại");
+                        }
+                    },
+                    error: function () {
+                        alert("Lỗi khi gọi API lấy trạng thái.");
+                    }
+                });
             });
 
             $('body').on('click', '#btnLuu', function () {
                 var id = $('#txtOrderId').val();
-                var tt = $('#ddTrangThai').val();
+                var newStatus = $('#ddTrangThai').val();
+                var newPaymentStatus = $('#ddPaymentStatus').val();
+
                 $.ajax({
                     url: '/admin/order/UpdateTT',
                     type: 'POST',
-                    data: { id: id, trangthai: tt },
+                    data: {
+                        id: id,
+                        trangthai: newStatus,
+                        paymentStatus: newPaymentStatus
+                    },
                     success: function (res) {
                         if (res.Success) {
                             location.reload();
+                        } else {
+                            alert(res.Message || "Cập nhật trạng thái đơn hàng thất bại.");
                         }
+                    },
+                    error: function () {
+                        alert("Lỗi khi cập nhật trạng thái.");
                     }
                 });
             });

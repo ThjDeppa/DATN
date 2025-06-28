@@ -46,7 +46,8 @@
                                         <th>#</th>
                                         <th>Mã đơn hàng</th>
                                         <th>Thành tiền</th>
-                                        <th>Trạng thái</th>
+                                        <th>Trạng thái thanh toán</th>
+                                        <th>Trạng thái đơn hàng</th>
                                         <th>Ngày đặt</th>
                                         <th></th>
                                     </tr>
@@ -59,7 +60,31 @@
                                                 <td>@i</td>
                                                 <td>@item.Code</td>
                                                 <td>@WebBanHangOnline.Common.Common.FormatNumber(item.TotalAmount, 0)</td>
-                                                <td>@(item.Status == 0 ? "Chờ xác nhận" : "Đã xác nhận")</td>
+                                                <td>@(item.PaymentStatus == 0 ? "Chưa thanh toán" : "Đã thanh toán")</td>
+                                                <td>
+                                                    @switch (item.Status)
+                                                    {
+                                                        case -1:
+                                                            <span>Chờ xác nhận</span>
+                                                            break;
+                                                        case 0:
+                                                            <span>Hủy</span>
+                                                            break;
+                                                        case 1:
+                                                            <span>Đã giao</span>
+                                                            break;
+                                                        case 2:
+                                                            <span>Đã xác nhận</span>
+                                                            break;
+                                                        case 3:
+                                                            <span>Đang giao</span>
+                                                            break;
+                                                        default:
+                                                            <span>Không xác định</span>
+                                                            break;
+                                                    }
+                                                </td>
+
                                                 <td>@item.CreatedDate.ToString("dd/MM/yyyy")</td>
                                                 <td>
                                                     <a href="/account/DetailPurchaseOrder/@item.Id" class="btn btn-sm btn-success">Chi tiết đơn hàng</a>

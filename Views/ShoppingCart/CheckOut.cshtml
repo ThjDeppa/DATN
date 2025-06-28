@@ -1,10 +1,15 @@
-﻿    @{
+﻿@{
     ViewBag.Title = "Thanh toán";
 }
 
-
+@using System.Linq
+@{
+    var promotions = ViewBag.Promotions as IEnumerable<WebBanHangOnline.Models.EF.Promotion>;
+}
 <style>
-    .error{color:red;}
+    .error {
+        color: red;
+    }
 </style>
 
 <link rel="stylesheet" type="text/css" href="~/Content/assets/styles/categories_styles.css">
@@ -17,7 +22,7 @@
 
             <div class="breadcrumbs d-flex flex-row align-items-center">
                 <ul>
-                    <li><a href="index.html">Home</a></li>
+                    <li><a href="index.html">Trang chủ</a></li>z
                     <li class="active"><a href="/"><i class="fa fa-angle-right" aria-hidden="true"></i>Giỏ hàng</a></li>
                 </ul>
             </div>
@@ -57,6 +62,26 @@
 @section scripts{
     <script src="~/Content/assets/js/categories_custom.js"></script>
     <script>
+        $(document).ready(function () {
+            var subtotal = parseFloat($('#subtotalPrice').data('value')) || 0;
+            var shipping = parseFloat($('#shippingPrice').data('value')) || 0;
+
+            function formatCurrency(num) {
+                return num.toLocaleString('vi-VN') + ' VNĐ';
+            }
+
+            $('#PromotionCode').on('change', function () {
+                var discountPercent = parseFloat($(this).find('option:selected').data('discount')) || 0;
+                var discountAmount = (discountPercent / 100) * subtotal;
+                var total = subtotal + shipping - discountAmount;
+
+                $('#discountAmount').text(formatCurrency(discountAmount));
+
+                $('#totalPrice').text(formatCurrency(total));
+            });
+        });
+
+
         function Ònailure(rs) {
             if (!rs.Success) {
                 $('#show_success').html("Bạn mua hàng thất bại! Xin vui lòng thử lại");
@@ -83,7 +108,7 @@
                     },
                     'Email': {
                         required: true,
-                        email:true
+                        email: true
                     }
                 },
                 messages: {
